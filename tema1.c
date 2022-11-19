@@ -6,22 +6,24 @@
 
 FILE* pFile; // declare them locally
 
-pthread_mutex_t mutex;
+pthread_barrier_t barrier;
+
+// verifica sa nu se ia 0
 
 typedef struct Package {
+    long id;
     int M, R, P, fileCounter;
     int** v;
     int* length;
-    int totalLength;
-    // int numberCount;
-    // int nr;
-    long id;
     FILE* qFile;
 } Package;
 
 typedef struct reducerPackage {
-    Package** package;
     long id;
+    int M, R, P;
+    // int* v;
+    // int length;
+    Package** package;
 } reducerPackage;
 
 int verifyNthPower(int a, int n)
@@ -60,17 +62,18 @@ void *fMapper(void *arg) {
 
                 for (int j = 0; j < package->R; j++)
                 {
-                    if (verifyNthPower(nr, j + 2))
-                    {
-                        // pthread_mutex_lock(&mutex);
-                        
-                        // printf("%d, putere perfecta de %d, thread %ld\n", package->nr, j + 2, package->id);
-                        (package->length[j])++;
-                        package->v[j] = realloc(package->v[j], package->length[j] * sizeof(int));
-                        package->v[j][package->length[j] - 1] = nr;
-                        
-                        // pthread_mutex_unlock(&mutex);
-                    }
+                    if (nr > 0)
+                        if (verifyNthPower(nr, j + 2))
+                        {
+                            // pthread_mutex_lock(&mutex);
+                            
+                            // printf("%d, putere perfecta de %d, thread %ld\n", package->nr, j + 2, package->id);
+                            (package->length[j])++;
+                            package->v[j] = realloc(package->v[j], package->length[j] * sizeof(int));
+                            package->v[j][package->length[j] - 1] = nr;
+                            
+                            // pthread_mutex_unlock(&mutex);
+                        }
                 }
             }
             // printf("thread %ld\n", package->id);
@@ -86,10 +89,37 @@ void *fMapper(void *arg) {
             
         }
     }
-    else
-    {
-        reducerPackage* reddy = (reducerPackage*)arg;
-        printf("%ld inside fMapper\n", reddy->id);
+
+    pthread_barrier_wait(&barrier);
+
+    reducerPackage* reddy = (reducerPackage*)arg;
+    if (reddy->id >= reddy->M && reddy->id < (reddy->M + reddy->R)) {
+
+        // printf("%ld inside fMapper\n", reddy->id - reddy->M);
+        // printf("%d inside thread %ld\n", reddy->package[0]->v[reddy->id - reddy->M][0], reddy->id - reddy->M + 2);
+
+        int v[214748]; // hardcodat // fa o functie de search care adauga elemente in vector
+        for (int i = 0; i < 214748; i++)
+            v[i] = 0;
+        int numaraNumere = 0;
+        for (int i = 0; i < reddy->M; i++)
+        {
+            for (int j = 0; j < reddy->package[i]->length[reddy->id - reddy->M]; j++)
+            {
+                int aux = reddy->package[i]->v[reddy->id - reddy->M][j];
+                if (aux < 214748)
+                {
+                    if (v[aux] == 0)
+                        numaraNumere++;
+                    v[aux] = 1;
+
+                }
+                else
+                    printf("vezi fii atent");
+                // printf("%d inside thread %ld\n", reddy->package[i]->v[reddy->id - reddy->M][j], reddy->id - reddy->M);
+            }
+        }
+        printf("%d from thread %ld\n", numaraNumere, reddy->id - reddy->M + 2);
     }
 
   	pthread_exit(NULL);
@@ -105,8 +135,7 @@ int main(int argc, char *argv[]) {
     fscanf(pFile, "%d", &fileCounter);
     // printf("%d %d %d\n", M, R, fileCounter);
 
-
-    pthread_mutex_init(&mutex, NULL);
+    pthread_barrier_init(&barrier, NULL, P);
 
     Package** package = malloc(sizeof(Package*)); // M * sizeof(Package)
     for (int i = 0; i < M; i++) {
@@ -117,7 +146,6 @@ int main(int argc, char *argv[]) {
         package[i]->fileCounter = fileCounter;
         package[i]->qFile = malloc(sizeof(FILE*));
         package[i]->id = i;
-        package[i]->totalLength = R;
         package[i]->v = malloc(1024 * R * sizeof(int)); // 1024 hardcodat
         for (int j = 0; j < R; j++)
         {
@@ -139,6 +167,13 @@ int main(int argc, char *argv[]) {
         }
         printf("%d\n", i);
         reducerPackage[i]->id = i;
+        reducerPackage[i]->M = M;
+        reducerPackage[i]->R = R;
+        reducerPackage[i]->P = P;
+        // reducerPackage[i]->v = malloc(R * sizeof(int));
+        // for (int j = 0; j < R; j++)
+        //     reducerPackage[i]->v[j] = 0;
+        // reducerPackage[i]->length = 0;
         // printf("%ld\n", reducerPackage[i]->id);
     }
     // reducerPackage[0]->id = 0; // linia asta da seg fault
@@ -162,7 +197,7 @@ int main(int argc, char *argv[]) {
             r = pthread_create(&threads[id], NULL, fMapper, package[id]);
         else
         {
-            printf("id = %ld\n", id);
+            // printf("id = %ld\n", id);
             r = pthread_create(&threads[id], NULL, fMapper, reducerPackage[id]);
         }
 
@@ -182,13 +217,13 @@ int main(int argc, char *argv[]) {
 		}
   	}
 
-    pthread_mutex_destroy(&mutex);
+    pthread_barrier_destroy(&barrier);
 
     for (int i = 0; i < M; i++)
     {
         printf("Thread %d:\n", i);
         for (int j = 0; j < package[i]->R; j++) {
-            printf("%d: ", j + 2);
+            printf("%d (length %d): ", j + 2, package[i]->length[j]);
             for (int k = 0; k < package[i]->length[j]; k++) {
                 printf("%d ", package[i]->v[j][k]);
             }
