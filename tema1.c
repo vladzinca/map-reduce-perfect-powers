@@ -10,6 +10,7 @@ FILE *pFile; // declare them locally
 pthread_barrier_t barrier;
 int** powerMatrix;
 int* lungimiVec;
+
 typedef struct Package
 {
     long id;
@@ -28,6 +29,15 @@ typedef struct ReducerPackage
     Package **package;
     FILE *rFile;
 } ReducerPackage;
+
+int calculeazaFaraPowSubunitar(int i)
+{
+    int a = 1;
+    while (pow(a, i) < INT_MAX)
+        a++;
+    return a - 1;
+    // return (int)(pow(INT_MAX, (float)1/i));
+}
 
 int verifyNthPowerRecursively(int arr[], int l, int r, int x)
 {
@@ -161,7 +171,7 @@ int main(int argc, char *argv[])
 
     lungimiVec = malloc(32 * sizeof(int));
     for (int i = 0; i < 32; i++)
-        lungimiVec[i] = (int)(pow(INT_MAX, (float)1/(i + 2)));
+        lungimiVec[i] = calculeazaFaraPowSubunitar(i + 2);
 
     // for (int i = 0; i < 32; i++)
     //     printf("%d\n", lungimiVec[i]);
@@ -263,29 +273,29 @@ int main(int argc, char *argv[])
 
     pthread_barrier_destroy(&barrier);
 
-    for (int i = 0; i < M; i++)
-    {
-        printf("Thread %d:\n", i);
-        for (int j = 0; j < package[i]->R; j++)
-        {
-            printf("%d (length %d): ", j + 2, package[i]->length[j]);
-            for (int k = 0; k < package[i]->length[j]; k++)
-            {
-                printf("%d ", package[i]->v[j][k]);
-            }
-            printf("\n");
-        }
-        printf("\n");
-    }
-    for (int i = M; i < P; i++)
-    {
-        printf("Thread %d (puteri de %d):\n", i, i - M + 2);
-        printf("(lungime %d): ", reducerPackage[i]->lungime);
-        for (int j = 0; j < reducerPackage[i]->lungime; j++) {
-            printf("%d ", reducerPackage[i]->sol[j]);
-        }
-        printf("\n\n");
-    }
+    // for (int i = 0; i < M; i++)
+    // {
+    //     printf("Thread %d:\n", i);
+    //     for (int j = 0; j < package[i]->R; j++)
+    //     {
+    //         printf("%d (length %d): ", j + 2, package[i]->length[j]);
+    //         for (int k = 0; k < package[i]->length[j]; k++)
+    //         {
+    //             printf("%d ", package[i]->v[j][k]);
+    //         }
+    //         printf("\n");
+    //     }
+    //     printf("\n");
+    // }
+    // for (int i = M; i < P; i++)
+    // {
+    //     printf("Thread %d (puteri de %d):\n", i, i - M + 2);
+    //     printf("(lungime %d): ", reducerPackage[i]->lungime);
+    //     for (int j = 0; j < reducerPackage[i]->lungime; j++) {
+    //         printf("%d ", reducerPackage[i]->sol[j]);
+    //     }
+    //     printf("\n\n");
+    // }
 
     pthread_exit(NULL);
 }
