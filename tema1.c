@@ -29,22 +29,45 @@ typedef struct ReducerPackage
     FILE *rFile;
 } ReducerPackage;
 
+int verifyNthPowerRecursively(int arr[], int l, int r, int x)
+{
+    if (r >= l) {
+        int mid = l + (r - l) / 2;
+
+        if (arr[mid] == x)
+            return mid;
+
+        if (arr[mid] > x)
+            return verifyNthPowerRecursively(arr, l, mid - 1, x);
+
+        return verifyNthPowerRecursively(arr, mid + 1, r, x);
+    }
+
+    return -1;
+}
+
 int verifyNthPower(int a, int n) // verifica ca exista x astfel incat x ^ n = a
 {
-    if (a == 1)
+    int left = 0;
+    int right = lungimiVec[n - 2] - 1;
+    if (verifyNthPowerRecursively(powerMatrix[n - 2], left, right, a) == -1)
+        return 0;
+    else
         return 1;
-    for (int i = 0; i < 31; i++)
-    {
-        if (a == powerMatrix[i][n])
-            return 1;
-    }
+    // if (a == 1)
+    //     return 1;
+    // for (int i = 0; i < 31; i++)
+    // {
+    //     if (a == powerMatrix[i][n])
+    //         return 1;
+    // }
     // int i = 1;
     // while (a > pow(i, n)) {
     //     i++;
     // }
     // if (a == pow(i, n))
     //     return 1;
-    return 0;
+    // return 0;
 }
 
 void *f(void *arg)
@@ -57,7 +80,7 @@ void *f(void *arg)
         // lock
         while (fscanf(pFile, "%s", s) != EOF)
         {
-            printf("%s de catre thread-ul %ld\n", s, package->id);
+            // printf("%s de catre thread-ul %ld\n", s, package->id);
 
             //unlock
 
@@ -90,27 +113,31 @@ void *f(void *arg)
 
     pthread_barrier_wait(&barrier);
 
-    printf("A inceput reduce-ul\n");
+    // printf("A inceput reduce-ul\n");
 
     ReducerPackage *reddy = (ReducerPackage *)arg;
     if (reddy->id >= reddy->M && reddy->id < (reddy->M + reddy->R))
     {
-        int numaraNumere = 0;
+        // printf("E un reducer\n");
         for (int i = 0; i < reddy->M; i++)
         {
             for (int j = 0; j < reddy->package[i]->length[reddy->id - reddy->M]; j++)
             {
                 int aux = reddy->package[i]->v[reddy->id - reddy->M][j];
+                // printf("Reducer: %d\n", aux);
                 int existaDeja = 0;
 
-                for (int k = 0; k < reddy->lungime; k++)
-                    if (reddy->sol[k] == aux)
-                        existaDeja = 1;
+                if (reddy->lungime != 0) {
+                    for (int k = 0; k < reddy->lungime; k++)
+                        if (reddy->sol[k] == aux)
+                            existaDeja = 1;
+                }
                 if (existaDeja == 0)
                 {
                     reddy->lungime++;
                     // reddy->sol = realloc(reddy->sol, reddy->lungime * sizeof(int));
                     reddy->sol[reddy->lungime - 1] = aux;
+                    // printf("Reducer2: %d\n", reddy->sol[reddy->lungime - 1]);
                 }
                 // printf("%d inside thread %ld\n", reddy->package[i]->v[reddy->id - reddy->M][j], reddy->id - reddy->M);
             }
@@ -149,7 +176,12 @@ int main(int argc, char *argv[])
         }
     }
 
-    // for (int i = 1; i < 32; i++) { // fara 2
+    // if (verifyNthPower(1280000000, 7))
+    //     printf("DA\n");
+    // else
+    //     printf("NU\n");
+
+    // for (int i = 5; i < 6; i++) { // 7
     //     for (int j = 0; j < lungimiVec[i]; j++)
     //         printf("%d ", powerMatrix[i][j]);
     //     printf("\n\n");
@@ -158,102 +190,102 @@ int main(int argc, char *argv[])
     pFile = fopen(argv[3], "r");
     fscanf(pFile, "%d", &fileCounter);
 
-    // pthread_barrier_init(&barrier, NULL, P);
+    pthread_barrier_init(&barrier, NULL, P);
 
-    // Package **package = malloc(sizeof(Package*)); // M * sizeof(Package)
-    // for (int i = 0; i < M; i++)
-    // {
-    //     package[i] = malloc(sizeof(Package));
-    //     package[i]->M = M;
-    //     package[i]->R = R;
-    //     package[i]->P = P;
-    //     package[i]->fileCounter = fileCounter;
-    //     package[i]->qFile = malloc(sizeof(FILE *));
-    //     package[i]->id = i;
-    //     package[i]->v = malloc(sizeof(int**)); // 1024 hardcodat
-    //     for (int j = 0; j < R; j++)
-    //     {
-    //         package[i]->v[j] = malloc(sizeof(int*));
-    //     }
-    //     package[i]->length = malloc(sizeof(int*));
-    //     for (int j = 0; j < R; j++)
-    //         package[i]->length[j] = 0;
-    // }
+    Package **package = malloc(32 * sizeof(Package)); // M * sizeof(Package)
+    for (int i = 0; i < M; i++)
+    {
+        package[i] = malloc(sizeof(Package));
+        package[i]->M = M;
+        package[i]->R = R;
+        package[i]->P = P;
+        package[i]->fileCounter = fileCounter;
+        package[i]->qFile = malloc(sizeof(FILE *));
+        package[i]->id = i;
+        package[i]->v = malloc(32 * sizeof(int*)); // 1024 hardcodat
+        for (int j = 0; j < R; j++)
+        {
+            package[i]->v[j] = malloc(1000 * sizeof(int));
+        }
+        package[i]->length = malloc(32 * sizeof(int));
+        for (int j = 0; j < R; j++)
+            package[i]->length[j] = 0;
+    }
 
-    // ReducerPackage **reducerPackage = malloc(1000 * R * sizeof(ReducerPackage));
-    // for (int i = M; i < R + M; i++)
-    // {
-    //     reducerPackage[i] = malloc(sizeof(ReducerPackage));
-    //     reducerPackage[i]->package = malloc(sizeof(Package *));
-    //     for (int j = 0; j < M; j++)
-    //     {
-    //         reducerPackage[i]->package[j] = malloc(sizeof(Package));
-    //         reducerPackage[i]->package[j] = package[j];
-    //     }
-    //     reducerPackage[i]->id = i;
-    //     reducerPackage[i]->M = M;
-    //     reducerPackage[i]->R = R;
-    //     reducerPackage[i]->P = P;
-    //     reducerPackage[i]->sol = malloc(sizeof(int*));
-    //     reducerPackage[i]->lungime = 0;
-    //     reducerPackage[i]->rFile = malloc(sizeof(FILE *));
-    // }
+    ReducerPackage **reducerPackage = malloc(64 * sizeof(ReducerPackage));
+    for (int i = M; i < R + M; i++)
+    {
+        reducerPackage[i] = malloc(sizeof(ReducerPackage));
+        reducerPackage[i]->package = malloc(32 * sizeof(Package));
+        for (int j = 0; j < M; j++)
+        {
+            reducerPackage[i]->package[j] = malloc(sizeof(Package));
+            reducerPackage[i]->package[j] = package[j];
+        }
+        reducerPackage[i]->id = i;
+        reducerPackage[i]->M = M;
+        reducerPackage[i]->R = R;
+        reducerPackage[i]->P = P;
+        reducerPackage[i]->sol = malloc(1000 * sizeof(int));
+        reducerPackage[i]->lungime = 0;
+        reducerPackage[i]->rFile = malloc(sizeof(FILE *));
+    }
 
-    // pthread_t threads[P];
-    // int r;
-    // long id;
-    // void *status;
+    pthread_t threads[P];
+    int r;
+    long id;
+    void *status;
 
-    // for (id = 0; id < P; id++)
-    // {
-    //     if (id < M)
-    //         r = pthread_create(&threads[id], NULL, f, package[id]);
-    //     else
-    //         r = pthread_create(&threads[id], NULL, f, reducerPackage[id]);
+    for (id = 0; id < P; id++)
+    {
+        if (id < M)
+            r = pthread_create(&threads[id], NULL, f, package[id]);
+        else
+            r = pthread_create(&threads[id], NULL, f, reducerPackage[id]);
 
-    //     if (r)
-    //     {
-    //         printf("Eroare la crearea thread-ului %ld\n", id);
-    //         exit(-1);
-    //     }
-    // }
+        if (r)
+        {
+            printf("Eroare la crearea thread-ului %ld\n", id);
+            exit(-1);
+        }
+    }
 
-    // for (id = 0; id < P; id++)
-    // {
-    //     r = pthread_join(threads[id], &status);
+    for (id = 0; id < P; id++)
+    {
+        r = pthread_join(threads[id], &status);
 
-    //     if (r)
-    //     {
-    //         printf("Eroare la asteptarea thread-ului %ld\n", id);
-    //         exit(-1);
-    //     }
-    // }
+        if (r)
+        {
+            printf("Eroare la asteptarea thread-ului %ld\n", id);
+            exit(-1);
+        }
+    }
 
-    // pthread_barrier_destroy(&barrier);
+    pthread_barrier_destroy(&barrier);
 
-    // for (int i = 0; i < M; i++)
-    // {
-    //     printf("Thread %d:\n", i);
-    //     for (int j = 0; j < package[i]->R; j++)
-    //     {
-    //         printf("%d (length %d): ", j + 2, package[i]->length[j]);
-    //         for (int k = 0; k < package[i]->length[j]; k++)
-    //         {
-    //             printf("%d ", package[i]->v[j][k]);
-    //         }
-    //         printf("\n");
-    //     }
-    //     printf("\n");
-    // }
-    // for (int i = M; i < P; i++)
-    // {
-    //     printf("Thread %d:\n", i);
-    //     printf("%d", reducerPackage[i]->lungime);
-    //     for (int j = 0; j < reducerPackage[i]->lungime; j++) {
-    //         printf("%d ", reducerPackage[i]->sol[j]);
-    //     }
-    //     printf("\n\n");
-    // }
+    for (int i = 0; i < M; i++)
+    {
+        printf("Thread %d:\n", i);
+        for (int j = 0; j < package[i]->R; j++)
+        {
+            printf("%d (length %d): ", j + 2, package[i]->length[j]);
+            for (int k = 0; k < package[i]->length[j]; k++)
+            {
+                printf("%d ", package[i]->v[j][k]);
+            }
+            printf("\n");
+        }
+        printf("\n");
+    }
+    for (int i = M; i < P; i++)
+    {
+        printf("Thread %d (puteri de %d):\n", i, i - M + 2);
+        printf("(lungime %d): ", reducerPackage[i]->lungime);
+        for (int j = 0; j < reducerPackage[i]->lungime; j++) {
+            printf("%d ", reducerPackage[i]->sol[j]);
+        }
+        printf("\n\n");
+    }
 
     pthread_exit(NULL);
 }
