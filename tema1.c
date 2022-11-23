@@ -9,31 +9,34 @@
 #define FILE_NAME_LENGTH 32
 #define ARRAY_ELEMENTS_NUMBER 1024
 
-typedef struct Package
+/* argumentul functiilor mapper */
+typedef struct MapperPackage
 {
-    pthread_barrier_t* barrier;
+    pthread_barrier_t *barrier;
     long id;
     int M, R, P, fileCounter;
     int **v;
     int *length;
-    int** powerMatrix;
-    int* lungimiVec;
-    FILE* pFile;
+    int **powerMatrix;
+    int *powerMatrixLengths;
+    FILE *pFile;
     FILE *qFile;
-} Package;
+} MapperPackage;
 
+/* argumentul functiile reducer */
 typedef struct ReducerPackage
 {
-    pthread_barrier_t* barrier;
+    pthread_barrier_t *barrier;
     long id;
     int M, R, P;
     int lungime;
     int *sol;
-    Package **package;
+    MapperPackage **mapperPackage;
     FILE *rFile;
 } ReducerPackage;
 
-int calculeazaFaraPowSubunitar(int i)
+/* incepe de la 1 si ridica la puterea i pana cand atinge INT_MAX */
+int computePowerMatrixLimit(int i)
 {
     int a = 1;
     while (pow(a, i) < INT_MAX)
@@ -41,128 +44,162 @@ int calculeazaFaraPowSubunitar(int i)
     return a - 1;
 }
 
-int verifyNthPowerRecursively(int arr[], int l, int r, int x)
+/* face binary search pe vectorul de puteri perfecte pentru a verifica daca x
+este putere perfecta */
+int verifyNthPowerRecursively(int v[], int st, int dr, int x)
 {
-    if (r >= l) {
-        int mid = l + (r - l) / 2;
+    if (dr >= st)
+    {
+        int mid = st + (dr - st) / 2;
 
-        if (arr[mid] == x)
+        if (v[mid] == x)
             return mid;
 
-        if (arr[mid] > x)
-            return verifyNthPowerRecursively(arr, l, mid - 1, x);
+        if (v[mid] > x)
+            return verifyNthPowerRecursively(v, st, mid - 1, x);
 
-        return verifyNthPowerRecursively(arr, mid + 1, r, x);
+        return verifyNthPowerRecursively(v, mid + 1, dr, x);
     }
 
     return -1;
 }
 
-int verifyNthPower(int a, int n, int* lungimiVec, int** powerMatrix) // verifica ca exista x astfel incat x ^ n = a
+/* verifica ca a este n-putere perfecta apeland verifyNthPowerRecursively */
+int verifyNthPower(int a, int n, int *powerMatrixLengths, int **powerMatrix)
 {
-    int left = 0;
-    int right = lungimiVec[n - 2] - 1;
-    if (verifyNthPowerRecursively(powerMatrix[n - 2], left, right, a) == -1)
+    int st = 0;
+    int dr = powerMatrixLengths[n - 2] - 1;
+    if (verifyNthPowerRecursively(powerMatrix[n - 2], st, dr, a) == -1)
         return 0;
     else
         return 1;
 }
 
+/* functia mapper/reducer */
 void *f(void *arg)
 {
-    Package *package = (Package *)arg;
-    if (package->id < package->M)
+    MapperPackage *mapperPackage = (MapperPackage *)arg;
+    /* daca thread-ul este mapper. Altfel, se duce la bariera si asteapta
+    executarea tuturor thread-urilor mapper */
+    if (mapperPackage->id < mapperPackage->M)
     {
         char s[FILE_NAME_LENGTH];
 
-        // lock
-        while (fscanf(package->pFile, "%s", s) != EOF)
+        /* citeste urmatorul fisier care e liber */
+        while (fscanf(mapperPackage->pFile, "%s", s) != EOF)
         {
-            //unlock
-
-            package->qFile = fopen(s, "r");
+            mapperPackage->qFile = fopen(s, "r");
             int numberCount;
-            fscanf(package->qFile, "%d", &numberCount);
+            /* citeste numarul de numere din fisier */
+            fscanf(mapperPackage->qFile, "%d", &numberCount);
 
             for (int i = 0; i < numberCount; i++)
             {
                 int nr;
-                fscanf(package->qFile, "%d", &nr);
+                /* citeste un numar din fisier */
+                fscanf(mapperPackage->qFile, "%d", &nr);
 
-                for (int j = 0; j < package->R; j++)
+                /* pentru toate j-urile, verifica ca nr sa fie
+                (j+2)-putere perfecta*/
+                for (int j = 0; j < mapperPackage->R; j++)
                 {
                     if (nr > 0)
-                        if (verifyNthPower(nr, j + 2, package->lungimiVec, package->powerMatrix))
+                        if (verifyNthPower(nr, j + 2, mapperPackage->powerMatrixLengths, mapperPackage->powerMatrix))
                         {
-                            (package->length[j])++;
-                            package->v[j][package->length[j] - 1] = nr;
+                            /* daca este putere perfecta, il pune in vector */
+                            (mapperPackage->length[j])++;
+                            mapperPackage->v[j][mapperPackage->length[j] - 1] = nr;
                         }
                 }
             }
-            //lock
+
+            fclose(mapperPackage->qFile);
         }
-        //unlock
     }
 
-    pthread_barrier_wait(package->barrier);
+    /* dupa ce termina toate thread-urile mapper executia, thread-urile
+    reducer le vor astepta aici */
+    pthread_barrier_wait(mapperPackage->barrier);
 
-    ReducerPackage *reddy = (ReducerPackage *)arg;
+    ReducerPackage *reducerPackage = (ReducerPackage *)arg;
 
-    if (reddy->id >= reddy->M && reddy->id < (reddy->M + reddy->R))
+    /* toate thread-urile trec de bariera. Daca thread-ul este mapper, nu
+    intra in acest if si se duce la pthread_exit */
+    if (reducerPackage->id >= reducerPackage->M && reducerPackage->id < (reducerPackage->M + reducerPackage->R))
     {
-        for (int i = 0; i < reddy->M; i++)
+        /* ia rezultatele de la fiecare thread M */
+        for (int i = 0; i < reducerPackage->M; i++)
         {
-            for (int j = 0; j < reddy->package[i]->length[reddy->id - reddy->M]; j++)
+            /* ia rezultatele pentru numerele putere perfecta pe care le
+            calculeaza el */
+            for (int j = 0; j < reducerPackage->mapperPackage[i]->length[reducerPackage->id - reducerPackage->M]; j++)
             {
-                int aux = reddy->package[i]->v[reddy->id - reddy->M][j];
+                int aux = reducerPackage->mapperPackage[i]->v[reducerPackage->id - reducerPackage->M][j];
                 int existaDeja = 0;
 
-                if (reddy->lungime != 0) {
-                    for (int k = 0; k < reddy->lungime; k++)
-                        if (reddy->sol[k] == aux)
+                /* verifica daca numarul verificat e duplicat */
+                if (reducerPackage->lungime != 0)
+                {
+                    for (int k = 0; k < reducerPackage->lungime; k++)
+                        if (reducerPackage->sol[k] == aux)
                             existaDeja = 1;
                 }
+                /* daca nu e, il adauga in vectorul solutie */
                 if (existaDeja == 0)
                 {
-                    reddy->lungime++;
-                    reddy->sol[reddy->lungime - 1] = aux;
+                    reducerPackage->lungime++;
+                    reducerPackage->sol[reducerPackage->lungime - 1] = aux;
                 }
             }
         }
+        /* la final scrie in fisierul corect lungimea vectorului solutie */
         char fisier[FILE_NAME_LENGTH];
-        sprintf(fisier, "out%ld.txt", reddy->id - reddy->M + 2);
-        reddy->rFile = fopen(fisier, "w");
-        fprintf(reddy->rFile, "%d", reddy->lungime);
+        sprintf(fisier, "out%ld.txt", reducerPackage->id - reducerPackage->M + 2);
+        reducerPackage->rFile = fopen(fisier, "w");
+        fprintf(reducerPackage->rFile, "%d", reducerPackage->lungime);
+
+        fclose(reducerPackage->rFile);
     }
 
+    /* thread-urile mapper trec peste if-ul de mai sus si ajung aici.
+    Thread-urile reducer ajung aici dupa scrierea in fisier a rezultatului
+    corect */
     pthread_exit(NULL);
 }
 
 int main(int argc, char *argv[])
 {
+    /* pointer-ul cu care se citesc fisiere */
     FILE *pFile;
+    /* numarul de thread-uri mapper, reducer si numarul de fisiere de citit */
     int M, R, P, fileCounter;
     M = atoi(argv[1]);
     R = atoi(argv[2]);
     P = M + R;
 
-    int** powerMatrix;
-    int* lungimiVec;
+    /* calculeaza o matrice cu toate puterile perfecte < INT_MAX de la 2 la 33.
+    Ma folosesc de faptul ca pot fi maxim 32 de thread-uri */
+    int **powerMatrix;
+    int *powerMatrixLengths;
 
-    lungimiVec = malloc(NUM_THREADS * sizeof(int));
+    powerMatrixLengths = malloc(NUM_THREADS * sizeof(int));
     for (int i = 0; i < NUM_THREADS; i++)
-        lungimiVec[i] = calculeazaFaraPowSubunitar(i + 2);
+        powerMatrixLengths[i] = computePowerMatrixLimit(i + 2);
 
-    powerMatrix = malloc(NUM_THREADS * sizeof(int*));
-    for (int i = 0; i < NUM_THREADS; i++) // vectori pentru puteri perfecte de 2, 3, ..., 33 (0 - 31)
-        powerMatrix[i] = malloc(lungimiVec[i] * sizeof(int));
+    powerMatrix = malloc(NUM_THREADS * sizeof(int *));
+    for (int i = 0; i < NUM_THREADS; i++)
+        /* vectorii puteri perfecte de 2, 3, ..., 33 (i de la 0 - 31) */
+        powerMatrix[i] = malloc(powerMatrixLengths[i] * sizeof(int));
 
-    for (int i = 0; i < NUM_THREADS; i++) {
-        for (int j = 0; j < lungimiVec[i]; j++) {
+    for (int i = 0; i < NUM_THREADS; i++)
+    {
+        for (int j = 0; j < powerMatrixLengths[i]; j++)
+        {
             powerMatrix[i][j] = pow(j + 1, i + 2);
         }
     }
 
+    /* deschide fisierul initial si citeste cate fisiere are de citit */
     pFile = fopen(argv[3], "r");
     fscanf(pFile, "%d", &fileCounter);
 
@@ -170,40 +207,42 @@ int main(int argc, char *argv[])
 
     pthread_barrier_init(&barrier, NULL, P);
 
-    Package **package = malloc(NUM_THREADS * sizeof(Package));
+    /* initializeaza argumentele thread-urilor. Fiecare mapper primeste un
+    mapperPackage, iar fiecare reducer primeste un reducerPackage. De mentionat
+    ca fiecare reducer primeste in pachetul sau si toate mapperPackage-urile */
+    MapperPackage **mapperPackage = malloc(NUM_THREADS * sizeof(MapperPackage));
     for (int i = 0; i < M; i++)
     {
-        package[i] = malloc(sizeof(Package));
-        package[i]->M = M;
-        package[i]->R = R;
-        package[i]->P = P;
-        package[i]->fileCounter = fileCounter;
-        package[i]->qFile = malloc(sizeof(FILE *));
-        package[i]->id = i;
-        package[i]->v = malloc(NUM_THREADS * sizeof(int*));
+        mapperPackage[i] = malloc(sizeof(MapperPackage));
+        mapperPackage[i]->M = M;
+        mapperPackage[i]->R = R;
+        mapperPackage[i]->P = P;
+        mapperPackage[i]->fileCounter = fileCounter;
+        mapperPackage[i]->qFile = malloc(sizeof(FILE *));
+        mapperPackage[i]->id = i;
+        mapperPackage[i]->v = malloc(NUM_THREADS * sizeof(int *));
         for (int j = 0; j < R; j++)
         {
-            package[i]->v[j] = malloc(ARRAY_ELEMENTS_NUMBER * sizeof(int));
+            mapperPackage[i]->v[j] = malloc(ARRAY_ELEMENTS_NUMBER * sizeof(int));
         }
-        package[i]->length = malloc(NUM_THREADS * sizeof(int));
+        mapperPackage[i]->length = malloc(NUM_THREADS * sizeof(int));
         for (int j = 0; j < R; j++)
-            package[i]->length[j] = 0;
-        package[i]->pFile = pFile;
-        package[i]->barrier = &barrier;
-        package[i]->powerMatrix = powerMatrix;
-        package[i]->lungimiVec = lungimiVec;
-
+            mapperPackage[i]->length[j] = 0;
+        mapperPackage[i]->pFile = pFile;
+        mapperPackage[i]->barrier = &barrier;
+        mapperPackage[i]->powerMatrix = powerMatrix;
+        mapperPackage[i]->powerMatrixLengths = powerMatrixLengths;
     }
 
     ReducerPackage **reducerPackage = malloc(2 * NUM_THREADS * sizeof(ReducerPackage));
     for (int i = M; i < R + M; i++)
     {
         reducerPackage[i] = malloc(sizeof(ReducerPackage));
-        reducerPackage[i]->package = malloc(NUM_THREADS * sizeof(Package));
+        reducerPackage[i]->mapperPackage = malloc(NUM_THREADS * sizeof(MapperPackage));
         for (int j = 0; j < M; j++)
         {
-            reducerPackage[i]->package[j] = malloc(sizeof(Package));
-            reducerPackage[i]->package[j] = package[j];
+            reducerPackage[i]->mapperPackage[j] = malloc(sizeof(MapperPackage));
+            reducerPackage[i]->mapperPackage[j] = mapperPackage[j];
         }
         reducerPackage[i]->id = i;
         reducerPackage[i]->M = M;
@@ -220,10 +259,13 @@ int main(int argc, char *argv[])
     long id;
     void *status;
 
+    /* deschide thread-urile */
     for (id = 0; id < P; id++)
     {
+        /* thread-urile mapper si reducer se deschid la acelasi moment de
+        timp */
         if (id < M)
-            r = pthread_create(&threads[id], NULL, f, package[id]);
+            r = pthread_create(&threads[id], NULL, f, mapperPackage[id]);
         else
             r = pthread_create(&threads[id], NULL, f, reducerPackage[id]);
 
@@ -234,6 +276,7 @@ int main(int argc, char *argv[])
         }
     }
 
+    /* dau join thread-urile */
     for (id = 0; id < P; id++)
     {
         r = pthread_join(threads[id], &status);
@@ -247,54 +290,35 @@ int main(int argc, char *argv[])
 
     pthread_barrier_destroy(&barrier);
 
-    // for (int i = 0; i < M; i++)
-    // {
-    //     printf("Thread %d:\n", i);
-    //     for (int j = 0; j < package[i]->R; j++)
-    //     {
-    //         printf("%d (length %d): ", j + 2, package[i]->length[j]);
-    //         for (int k = 0; k < package[i]->length[j]; k++)
-    //         {
-    //             printf("%d ", package[i]->v[j][k]);
-    //         }
-    //         printf("\n");
-    //     }
-    //     printf("\n");
-    // }
-    // for (int i = M; i < P; i++)
-    // {
-    //     printf("Thread %d (puteri de %d):\n", i, i - M + 2);
-    //     printf("(lungime %d): ", reducerPackage[i]->lungime);
-    //     for (int j = 0; j < reducerPackage[i]->lungime; j++) {
-    //         printf("%d ", reducerPackage[i]->sol[j]);
-    //     }
-    //     printf("\n\n");
-    // }
-
     pthread_exit(NULL);
+
+    /* se elibereaza memoria */
+    fclose(pFile);
 
     for (int i = 0; i < NUM_THREADS; i++)
         free(powerMatrix[i]);
     free(powerMatrix);
-    free(lungimiVec);
-    for (int i = M; i < R + M; i++) {
+    free(powerMatrixLengths);
+    for (int i = M; i < R + M; i++)
+    {
         for (int j = 0; j < M; j++)
-            free(reducerPackage[i]->package[j]);
-        free(reducerPackage[i]->package);
+            free(reducerPackage[i]->mapperPackage[j]);
+        free(reducerPackage[i]->mapperPackage);
         free(reducerPackage[i]->sol);
         free(reducerPackage[i]->rFile);
         free(reducerPackage[i]);
     }
     free(reducerPackage);
-    for (int i = 0; i < M; i++) {
+    for (int i = 0; i < M; i++)
+    {
         for (int j = 0; j < R; j++)
-            free(package[i]->v[j]);
-        free(package[i]->v);
-        free(package[i]->qFile);
-        free(package[i]->length);
-        free(package[i]);
+            free(mapperPackage[i]->v[j]);
+        free(mapperPackage[i]->v);
+        free(mapperPackage[i]->qFile);
+        free(mapperPackage[i]->length);
+        free(mapperPackage[i]);
     }
-    free(package);
+    free(mapperPackage);
 
     return 0;
 }
