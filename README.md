@@ -1,6 +1,6 @@
 # Map Reduce Perfect Powers
 
-## What is it?
+## 🚀 What is it?
 
 This project is a C algorithm using pthreads that iterates through thousands of files and computes how many non-zero positive [perfect powers](https://en.wikipedia.org/wiki/Perfect_power) there are in said files.
 
@@ -8,7 +8,7 @@ It does this using the MapReduce programming model popularized by Google and use
 
 I worked on in for three days during November 2022 and learned a lot about multithreading while doing so.
 
-## How to run it?
+## 🔧 How to run it?
 
 ### Method 1)
 
@@ -24,7 +24,7 @@ I worked on in for three days during November 2022 and learned a lot about multi
 4.  Additionally, you can create your own test and input files for yourself.
 5.  Enjoy!
 
-## What does it do?
+## 📏 What does it do?
 
 As explained in the paper mentioned above, it uses two types of threads, mappers and reducers, to do very specific tasks.
 
@@ -32,7 +32,7 @@ Each mapper thread opens files that have not yet been opened, reads all the numb
 
 After the mappers are done, each reducer starts combining the partial lists mappers have computed for a certain value, removing the duplicates and counting up the values left. So if there are 3 reducers, the first one will compute the number of 2-perfect powers, the second one will compute the number of 3-perfect powers, and the last one will compute the number of 4-perfect powers.
 
-## How did I do it?
+## 💡 How did I do it?
 
 There were two challenges to bringing the idea to life.
 
@@ -44,6 +44,6 @@ However, I quickly realized that on large numbers it is very, very slow. This to
 
 This approach is much faster and works as intended.
 
-## Did you know?
+## 🤔 Did you know?
 
 It can only compute up to 33-perfect powers and only numbers that are smaller than `2^31`, so be careful.
