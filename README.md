@@ -6,7 +6,7 @@ This project is a C algorithm using pthreads that iterates through thousands of 
 
 It does this using the MapReduce programming model popularized by Google and used to process very large data sets in distributed systems, as explained in detail in [this](http://static.googleusercontent.com/media/research.google.com/en//archive/mapreduce-osdi04.pdf) paper.
 
-I worked on in for three days during November 2022 and learned a lot about multithreading while doing so.
+I worked on this for three days during November 2022 and learned a lot about multithreading while doing so.
 
 ## 🔧 How to run it?
 
